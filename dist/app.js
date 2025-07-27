@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { MockInboxService } from './services/mockInbox.js';
-import Dashboard from './components/Dashboard.js';
-import DraftReview from './components/DraftReview.js';
+import StreamingInterface from './components/StreamingInterface.js';
 const App = ({ resetInbox = false, debug = false }) => {
     const [state, setState] = useState('loading');
     const [error, setError] = useState('');
@@ -17,7 +16,7 @@ const App = ({ resetInbox = false, debug = false }) => {
                 if (resetInbox) {
                     await inboxService.resetInbox();
                 }
-                setState('dashboard');
+                setState('streaming');
             }
             catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to initialize app');
@@ -31,12 +30,7 @@ const App = ({ resetInbox = false, debug = false }) => {
             exit();
         }
     });
-    const handleStartProcessing = () => {
-        const unreadEmails = inboxService.getUnreadEmails();
-        setAllUnreadEmails(unreadEmails);
-        setState('review');
-    };
-    const handleReviewComplete = async (drafts) => {
+    const handleStreamingComplete = async (drafts) => {
         // Mark all processed emails as read
         const emailIdsToMarkRead = drafts
             .filter(draft => draft.status === 'accepted' || draft.status === 'skipped')
@@ -44,26 +38,11 @@ const App = ({ resetInbox = false, debug = false }) => {
         if (emailIdsToMarkRead.length > 0) {
             await inboxService.markEmailsAsRead(emailIdsToMarkRead);
         }
-        // Check if there are more unread emails
-        const remainingUnread = inboxService.getUnreadCount();
-        if (remainingUnread > 0) {
-            // Continue with remaining emails
-            handleStartProcessing();
-        }
-        else {
-            setState('complete');
-        }
-    };
-    const handleEmailProcessed = async (emailId, action) => {
-        // Mark email as read in background
-        if (action === 'accepted' || action === 'skipped') {
-            await inboxService.markEmailAsRead(emailId);
-        }
+        setState('complete');
     };
     const handleBack = () => {
-        if (state === 'review') {
-            setState('dashboard');
-        }
+        // Allow going back to restart the streaming interface
+        setState('streaming');
     };
     if (state === 'loading') {
         return (React.createElement(Box, { flexDirection: "column", paddingY: 1 },
@@ -83,11 +62,8 @@ const App = ({ resetInbox = false, debug = false }) => {
             React.createElement(Text, null, "All unread emails have been processed."),
             React.createElement(Text, { color: "cyan" }, "Press Ctrl+C to exit")));
     }
-    if (state === 'dashboard') {
-        return (React.createElement(Dashboard, { inboxService: inboxService, debug: debug, onStartBatch: handleStartProcessing, batchOffset: 0 }));
-    }
-    if (state === 'review') {
-        return (React.createElement(DraftReview, { emails: allUnreadEmails, onComplete: handleReviewComplete, onBack: handleBack, debug: debug, onEmailProcessed: handleEmailProcessed }));
+    if (state === 'streaming') {
+        return (React.createElement(StreamingInterface, { inboxService: inboxService, debug: debug, onComplete: handleStreamingComplete, onBack: handleBack }));
     }
     return null;
 };

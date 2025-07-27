@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { MockInboxService } from './services/mockInbox.js';
 import { Email, EmailDraft } from './types/email.js';
-import Dashboard from './components/Dashboard.js';
-import DraftReview from './components/DraftReview.js';
+import StreamingInterface from './components/StreamingInterface.js';
 
 interface AppProps {
   resetInbox?: boolean;
   debug?: boolean;
 }
 
-type AppState = 'loading' | 'dashboard' | 'review' | 'complete' | 'error';
+type AppState = 'loading' | 'streaming' | 'complete' | 'error';
 
 const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
   const [state, setState] = useState<AppState>('loading');
@@ -29,7 +28,7 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
           await inboxService.resetInbox();
         }
         
-        setState('dashboard');
+        setState('streaming');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to initialize app');
         setState('error');
@@ -45,13 +44,7 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
     }
   });
 
-  const handleStartProcessing = () => {
-    const unreadEmails = inboxService.getUnreadEmails();
-    setAllUnreadEmails(unreadEmails);
-    setState('review');
-  };
-
-  const handleReviewComplete = async (drafts: EmailDraft[]) => {
+  const handleStreamingComplete = async (drafts: EmailDraft[]) => {
     // Mark all processed emails as read
     const emailIdsToMarkRead = drafts
       .filter(draft => draft.status === 'accepted' || draft.status === 'skipped')
@@ -61,27 +54,12 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
       await inboxService.markEmailsAsRead(emailIdsToMarkRead);
     }
     
-    // Check if there are more unread emails
-    const remainingUnread = inboxService.getUnreadCount();
-    if (remainingUnread > 0) {
-      // Continue with remaining emails
-      handleStartProcessing();
-    } else {
-      setState('complete');
-    }
-  };
-
-  const handleEmailProcessed = async (emailId: string, action: 'accepted' | 'skipped' | 'edited') => {
-    // Mark email as read in background
-    if (action === 'accepted' || action === 'skipped') {
-      await inboxService.markEmailAsRead(emailId);
-    }
+    setState('complete');
   };
 
   const handleBack = () => {
-    if (state === 'review') {
-      setState('dashboard');
-    }
+    // Allow going back to restart the streaming interface
+    setState('streaming');
   };
 
   if (state === 'loading') {
@@ -112,25 +90,13 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
     );
   }
 
-  if (state === 'dashboard') {
+  if (state === 'streaming') {
     return (
-      <Dashboard 
+      <StreamingInterface 
         inboxService={inboxService} 
         debug={debug}
-        onStartBatch={handleStartProcessing}
-        batchOffset={0}
-      />
-    );
-  }
-
-  if (state === 'review') {
-    return (
-      <DraftReview 
-        emails={allUnreadEmails}
-        onComplete={handleReviewComplete}
+        onComplete={handleStreamingComplete}
         onBack={handleBack}
-        debug={debug}
-        onEmailProcessed={handleEmailProcessed}
       />
     );
   }

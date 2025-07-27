@@ -9,7 +9,7 @@
       "subject": "Project Timeline Update Request",
       "date": "2024-01-21T09:15:00Z",
       "body": "Hi there,\n\nI hope this email finds you well. I wanted to touch base regarding the Q1 project timeline we discussed last week. Our stakeholders are asking for an updated schedule, particularly around the delivery milestones for the API integration phase.\n\nCould you please provide an updated timeline by EOD Wednesday? Specifically, I need to know:\n- When will the API endpoints be ready for testing?\n- What's the expected completion date for the authentication module?\n- Are there any blockers that might impact our February 15th deadline?\n\nThanks for your attention to this.\n\nBest regards,\nAlice",
-      "unread": true,
+      "unread": false,
       "requiresResponse": true
     },
     {
@@ -21,7 +21,7 @@
       "subject": "This Week in Tech: AI Breakthroughs and Market Updates",
       "date": "2024-01-21T07:00:00Z",
       "body": "TechDaily Weekly Digest\n\n🚀 Top Stories This Week:\n\n1. Major AI Breakthrough: New Language Model Achieves Human-Level Performance\n2. Apple Announces Revolutionary Battery Technology\n3. Cybersecurity Alert: New Vulnerability Discovered in Popular Framework\n4. Market Watch: Tech Stocks Rally on Strong Earnings\n\nRead more at techdaily.com\n\nUnsubscribe | Update Preferences",
-      "unread": true,
+      "unread": false,
       "requiresResponse": false
     },
     {
@@ -33,7 +33,7 @@
       "subject": "Reminder: Submit Q4 Timesheet",
       "date": "2024-01-21T08:30:00Z",
       "body": "Hello,\n\nThis is a friendly reminder that Q4 timesheets are due by Friday, January 26th at 5:00 PM.\n\nPlease ensure all your hours are logged in the HR portal. If you have any questions about timesheet submission or need help accessing the system, please don't hesitate to reach out.\n\nYou can access the timesheet portal here: https://hr.company.com/timesheets\n\nThank you,\nBob Martinez\nHR Department",
-      "unread": true,
+      "unread": false,
       "requiresResponse": true
     },
     {
@@ -45,7 +45,7 @@
       "subject": "Re: Logo Design Feedback",
       "date": "2024-01-20T16:45:00Z",
       "body": "Hi!\n\nThanks for your feedback on the initial logo concepts. I've made the revisions you requested:\n\n- Changed the color scheme to match your brand guidelines\n- Adjusted the font weight for better readability\n- Created both horizontal and vertical versions\n\nI've attached the updated designs (v2) for your review. Please let me know if these align better with your vision, or if you'd like me to explore any other directions.\n\nLooking forward to your thoughts!\n\nBest,\nSarah\n\n[Attachments: Logo_v2_horizontal.png, Logo_v2_vertical.png, Logo_v2_guidelines.pdf]",
-      "unread": true,
+      "unread": false,
       "requiresResponse": true
     },
     {
@@ -57,7 +57,7 @@
       "subject": "Your AWS Monthly Bill is Available",
       "date": "2024-01-20T00:00:00Z",
       "body": "Hello,\n\nYour AWS monthly bill for December 2023 is now available.\n\nAccount ID: 123456789\nBilling Period: December 1 - December 31, 2023\nTotal Amount: $342.67\n\nYou can view your detailed bill and download invoices in the AWS Billing Console.\n\nThank you for using AWS.\n\nAmazon Web Services",
-      "unread": true,
+      "unread": false,
       "requiresResponse": false
     },
     {
@@ -69,7 +69,7 @@
       "subject": "Meeting Follow-up: Budget Proposal Questions",
       "date": "2024-01-19T14:20:00Z",
       "body": "Hi,\n\nThank you for presenting the budget proposal yesterday. The team found it very comprehensive. However, we have a few clarification questions:\n\n1. The marketing spend for Q2 seems higher than usual - could you break down the specific campaigns included?\n2. Is the $50K contingency fund sufficient given the project scope?\n3. Can you confirm if the maintenance costs include 24/7 support?\n\nWe'd appreciate your responses before our board meeting on Thursday.\n\nRegards,\nMichael Thompson\nProcurement Director",
-      "unread": true,
+      "unread": false,
       "requiresResponse": true
     },
     {
@@ -81,7 +81,7 @@
       "subject": "[Security Alert] New login to your account",
       "date": "2024-01-21T10:00:00Z",
       "body": "Hi username,\n\nWe noticed a new login to your GitHub account.\n\nDevice: Chrome on macOS\nLocation: San Francisco, CA, United States\nTime: January 21, 2024 at 10:00 AM PST\n\nIf this was you, you can safely ignore this email. If you didn't log in from this device and location, please secure your account immediately.\n\nSecure your account: https://github.com/settings/security\n\nThanks,\nThe GitHub Team",
-      "unread": true,
+      "unread": false,
       "requiresResponse": false
     },
     {
@@ -93,7 +93,7 @@
       "subject": "Quick question about campaign metrics",
       "date": "2024-01-21T11:30:00Z",
       "body": "Hey!\n\nHope you're having a good Monday! I'm putting together the monthly report and realized I'm missing the conversion rates for the email campaign we ran last week.\n\nDo you have those numbers handy? I specifically need:\n- Open rate\n- Click-through rate\n- Conversion rate\n- Total revenue attributed\n\nNo rush, but if you could send them by tomorrow afternoon that would be great!\n\nThanks,\nEmma",
-      "unread": true,
+      "unread": false,
       "requiresResponse": true
     },
     {
