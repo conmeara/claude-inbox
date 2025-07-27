@@ -3,24 +3,21 @@ import { Box, Text, useInput, useApp } from 'ink';
 import { MockInboxService } from './services/mockInbox.js';
 import { Email, EmailDraft } from './types/email.js';
 import Dashboard from './components/Dashboard.js';
-import BatchSummary from './components/BatchSummary.js';
 import DraftReview from './components/DraftReview.js';
-import SendConfirm from './components/SendConfirm.js';
 
 interface AppProps {
   resetInbox?: boolean;
   debug?: boolean;
 }
 
-type AppState = 'loading' | 'dashboard' | 'summary' | 'review' | 'confirm' | 'complete' | 'error';
+type AppState = 'loading' | 'dashboard' | 'review' | 'complete' | 'error';
 
 const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
   const [state, setState] = useState<AppState>('loading');
   const [error, setError] = useState<string>('');
   const [inboxService] = useState(() => new MockInboxService());
-  const [currentBatch, setCurrentBatch] = useState<Email[]>([]);
-  const [currentDrafts, setCurrentDrafts] = useState<EmailDraft[]>([]);
-  const [batchOffset, setBatchOffset] = useState(0);
+  const [allUnreadEmails, setAllUnreadEmails] = useState<Email[]>([]);
+  const [processedDrafts, setProcessedDrafts] = useState<EmailDraft[]>([]);
   const { exit } = useApp();
 
   useEffect(() => {
@@ -48,41 +45,42 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
     }
   });
 
-  const handleStartBatch = () => {
-    const batch = inboxService.getEmailBatch(10, batchOffset);
-    setCurrentBatch(batch);
-    setState('summary');
-  };
-
-  const handleSummaryComplete = () => {
+  const handleStartProcessing = () => {
+    const unreadEmails = inboxService.getUnreadEmails();
+    setAllUnreadEmails(unreadEmails);
     setState('review');
   };
 
-  const handleReviewComplete = (drafts: EmailDraft[]) => {
-    setCurrentDrafts(drafts);
-    setState('confirm');
-  };
-
-  const handleSendComplete = () => {
-    // Check if there are more emails to process
-    const remainingUnread = inboxService.getUnreadCount();
+  const handleReviewComplete = async (drafts: EmailDraft[]) => {
+    // Mark all processed emails as read
+    const emailIdsToMarkRead = drafts
+      .filter(draft => draft.status === 'accepted' || draft.status === 'skipped')
+      .map(draft => draft.emailId);
     
+    if (emailIdsToMarkRead.length > 0) {
+      await inboxService.markEmailsAsRead(emailIdsToMarkRead);
+    }
+    
+    // Check if there are more unread emails
+    const remainingUnread = inboxService.getUnreadCount();
     if (remainingUnread > 0) {
-      // Move to next batch
-      setBatchOffset(batchOffset + 10);
-      setState('dashboard');
+      // Continue with remaining emails
+      handleStartProcessing();
     } else {
       setState('complete');
     }
   };
 
+  const handleEmailProcessed = async (emailId: string, action: 'accepted' | 'skipped' | 'edited') => {
+    // Mark email as read in background
+    if (action === 'accepted' || action === 'skipped') {
+      await inboxService.markEmailAsRead(emailId);
+    }
+  };
+
   const handleBack = () => {
-    if (state === 'summary') {
+    if (state === 'review') {
       setState('dashboard');
-    } else if (state === 'review') {
-      setState('summary');
-    } else if (state === 'confirm') {
-      setState('review');
     }
   };
 
@@ -119,19 +117,8 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
       <Dashboard 
         inboxService={inboxService} 
         debug={debug}
-        onStartBatch={handleStartBatch}
-        batchOffset={batchOffset}
-      />
-    );
-  }
-
-  if (state === 'summary') {
-    return (
-      <BatchSummary 
-        emails={currentBatch}
-        onContinue={handleSummaryComplete}
-        onBack={handleBack}
-        debug={debug}
+        onStartBatch={handleStartProcessing}
+        batchOffset={0}
       />
     );
   }
@@ -139,26 +126,15 @@ const App: React.FC<AppProps> = ({ resetInbox = false, debug = false }) => {
   if (state === 'review') {
     return (
       <DraftReview 
-        emails={currentBatch}
+        emails={allUnreadEmails}
         onComplete={handleReviewComplete}
         onBack={handleBack}
         debug={debug}
+        onEmailProcessed={handleEmailProcessed}
       />
     );
   }
 
-  if (state === 'confirm') {
-    return (
-      <SendConfirm 
-        emails={currentBatch}
-        drafts={currentDrafts}
-        inboxService={inboxService}
-        onComplete={handleSendComplete}
-        onBack={handleBack}
-        debug={debug}
-      />
-    );
-  }
 
   return null;
 };

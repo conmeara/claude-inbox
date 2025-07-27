@@ -6,6 +6,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Claude Inbox is an AI-powered email triage assistant that runs in the terminal. This is an MVP implementation that demonstrates the core concept using mock email data instead of real Gmail integration.
 
+## Email Writing Style Guidelines
+
+When drafting email replies, please follow these preferences:
+
+### Tone and Voice
+- Use a warm, professional tone
+- Be concise but not curt
+- Show appreciation when appropriate ("Thank you for...")
+- Use active voice when possible
+
+### Structure
+- Start with a personalized greeting using the sender's first name
+- Get to the point quickly in the first sentence
+- Use short paragraphs (2-3 sentences max)
+- End with "Best regards" or "Best" depending on formality
+
+### Response Patterns
+- For scheduling: "I'm available [specific times]. Would [time] work for you?"
+- For requests: Acknowledge receipt, provide timeline, confirm next steps
+- For questions: Answer directly first, then provide context if needed
+- For updates: Lead with the key status, then brief details
+
+### Signature
+```
+Best regards,
+[Your name]
+```
+
+### Example Responses
+
+**For a meeting request:**
+"Hi Alice, I'd be happy to discuss the project timeline. I'm available Tuesday 2-4pm or Thursday morning. Would either of these work for you?"
+
+**For a task reminder:**
+"Hi Bob, Thanks for the reminder. I've just submitted the timesheet. Please let me know if you need anything else."
+
+**For feedback:**
+"Hi Sarah, Thank you for the detailed feedback. I'll review your comments and incorporate the changes by Friday. I'll send you the updated version then."
+
 ## Development Commands
 
 ### Building and Running
@@ -25,28 +64,30 @@ Always run `npm run build` after making TypeScript changes before testing with `
 ### Core Application Flow
 The app follows a state machine pattern with these main states:
 1. **loading** - Initialize mock inbox data  
-2. **dashboard** - Display unread emails and batch selection
-3. **summary** - AI generates email summaries for current batch
-4. **review** - Interactive draft review (Tab/Edit/Skip workflow)
-5. **confirm** - Final confirmation before "sending"
-6. **complete** - Inbox zero achieved or batch completed
+2. **dashboard** - Display first 10 unread emails with Y/N prompt
+3. **review** - Process emails individually with AI summaries and drafts (Tab/Edit/Skip workflow)
+4. **confirm** - Final confirmation before "sending"
+5. **complete** - Inbox zero achieved or batch completed
 
 ### Key Components Architecture
 - **App.tsx** - Main state machine managing workflow between components
-- **Dashboard.tsx** - Inbox overview, displays 10 emails per batch with Y/N navigation
-- **BatchSummary.tsx** - Displays AI-generated summaries, uses loading states
-- **DraftReview.tsx** - Core interactive component with Tab/Edit/Skip controls
+- **Dashboard.tsx** - Inbox overview, displays 10 emails with Y/N navigation
+- **DraftReview.tsx** - Process emails individually showing summary + draft with Tab/Edit/Skip controls
 - **SendConfirm.tsx** - Final review and mock sending simulation
 
 ### Service Layer
 - **MockInboxService** - Manages email data from `mock-data/inbox.json`, handles read/unread state persistence
-- **AIService** - Mock AI logic for email summarization and draft generation (currently uses pattern matching instead of real Claude API)
+- **AIService** - Full Claude API integration with batch processing, personalized writing style, and intelligent fallbacks
 - **MemoryService** - Stub for future CLAUDE.md user style preferences integration
 
 ### Data Flow
 1. MockInboxService loads 25 mock emails from JSON
-2. App processes emails in batches of 10 with offset tracking
-3. AIService generates summaries and drafts using mock logic
+2. Dashboard shows first 10 unread emails
+3. DraftReview processes emails individually:
+   - AI generates summary for each email
+   - AI generates draft if email needs response
+   - User reviews each email one by one
+   - Background processing prepares next email while user reviews
 4. Components pass state up through callback props
 5. Email read/unread state persists to JSON file
 
@@ -60,8 +101,20 @@ The app follows a state machine pattern with these main states:
 
 ## Important Implementation Details
 
-### Mock AI vs Real AI
-The current AIService uses pattern matching on email subjects/content instead of real Claude API calls. Comments indicate where real Claude Code SDK integration would go. The @anthropic-ai/claude-code dependency is included but not actively used in MVP.
+### AI Integration
+The AIService uses **optimized Claude Code SDK integration** with advanced features:
+
+- **Individual Processing**: Each email processed separately with its own Claude SDK session
+- **Parallel Processing**: While user reviews email N, Claude prepares email N+1
+- **Personalized Style**: Automatically loads and applies writing preferences from this CLAUDE.md file
+- **Smart Context**: Uses system prompts to better understand email context and generate appropriate responses
+- **Multi-turn Support**: Allows AI improvements during draft editing ("AI: make this more formal")
+- **Progress Updates**: Real-time status messages during AI processing
+- **Fallback Logic**: Pattern-matching when API key is unavailable or API calls fail  
+- **Retry Logic**: Exponential backoff with 3 retry attempts for reliable API calls
+- **Error Handling**: Graceful degradation ensures the app always works
+
+Set `ANTHROPIC_API_KEY` environment variable to enable real AI features.
 
 ### Interactive Controls
 - Tab key accepts drafts (not just any key)
@@ -83,9 +136,13 @@ The current AIService uses pattern matching on email subjects/content instead of
 ## Known Limitations
 
 This MVP intentionally uses mock implementations for:
-- AI summarization and draft generation (pattern matching instead of real AI)
 - Email sending (simulation only)
-- Gmail integration (mock JSON data)
+- Gmail integration (mock JSON data)  
 - OAuth authentication (not implemented)
 
-Real Claude API integration is prepared but commented out in AIService for MVP demonstration purposes.
+The AIService now includes real Claude API integration with pattern-matching fallbacks for reliability.
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

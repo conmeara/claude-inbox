@@ -348,6 +348,43 @@ Write only the email body content, no subject line or additional formatting. Sta
     return drafts;
   }
 
+  // New method for processing individual emails with summary and optional draft
+  async processEmail(email: Email): Promise<{ summary: string; draft?: EmailDraft }> {
+    try {
+      // Generate summary
+      const summary = await this.summarizeEmail(email);
+      
+      // Generate draft if needed
+      let draft: EmailDraft | undefined;
+      if (email.requiresResponse) {
+        const draftContent = await this.generateEmailDraft(email);
+        draft = {
+          emailId: email.id,
+          draftContent,
+          status: 'pending'
+        };
+      }
+      
+      return { summary, draft };
+    } catch (error) {
+      console.error(`Failed to process email ${email.id}:`, error);
+      
+      // Fallback processing
+      const fallbackSummary = `${email.from.name} sent a message regarding "${email.subject}".`;
+      let draft: EmailDraft | undefined;
+      
+      if (email.requiresResponse) {
+        draft = {
+          emailId: email.id,
+          draftContent: this.getFallbackDraft(email),
+          status: 'pending'
+        };
+      }
+      
+      return { summary: fallbackSummary, draft };
+    }
+  }
+
   private getFallbackDraft(email: Email): string {
     const subject = email.subject.toLowerCase();
     const body = email.body.toLowerCase();

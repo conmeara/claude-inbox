@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { MockInboxService } from '../services/mockInbox.js';
 import { Email } from '../types/email.js';
+import { ConfigService } from '../services/config.js';
 
 interface DashboardProps {
   inboxService: MockInboxService;
@@ -16,6 +17,7 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
   const [totalUnread, setTotalUnread] = useState(0);
   const [batchNumber, setBatchNumber] = useState(1);
   const [showPrompt, setShowPrompt] = useState(false);
+  const configService = new ConfigService();
 
   useEffect(() => {
     const emails = inboxService.getUnreadEmails();
@@ -66,12 +68,16 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
         <Text>
           Unread Emails: <Text bold color="yellow">{totalUnread}</Text>
         </Text>
+        <Text color="gray"> • AI Mode: </Text>
+        <Text color={configService.hasApiKey() ? "green" : "yellow"}>
+          {configService.hasApiKey() ? "Claude API" : "Pattern Matching"}
+        </Text>
       </Box>
 
-      {/* Batch Preview */}
+      {/* Email Preview */}
       <Box flexDirection="column" marginBottom={1}>
         <Text color="cyan">
-          Batch #{batchNumber} ({Math.min(currentBatch.length, 10)} emails):
+          First {Math.min(currentBatch.length, 10)} unread emails:
         </Text>
         <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
         
@@ -97,7 +103,7 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
       {totalUnread > 10 && (
         <Box marginBottom={1}>
           <Text color="gray">
-            ({totalUnread - 10} more unread emails after this batch)
+            ({totalUnread - 10} more unread emails)
           </Text>
         </Box>
       )}
@@ -107,7 +113,7 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
         <Box flexDirection="column" marginTop={1}>
           <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
           <Text>
-            Process these {Math.min(currentBatch.length, 10)} emails now? 
+            Process all {totalUnread} unread emails now? 
           </Text>
           <Text color="cyan">
             Press [Y] to continue, [N] to exit
