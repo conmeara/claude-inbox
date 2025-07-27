@@ -12,7 +12,7 @@ interface DraftReviewProps {
   debug?: boolean;
 }
 
-type ReviewState = 'generating' | 'reviewing' | 'editing' | 'error';
+type ReviewState = 'generating' | 'reviewing' | 'editing' | 'error' | 'clarifying';
 
 const DraftReview: React.FC<DraftReviewProps> = ({ 
   emails, 
@@ -25,18 +25,36 @@ const DraftReview: React.FC<DraftReviewProps> = ({
   const [currentDraftIndex, setCurrentDraftIndex] = useState(0);
   const [editingText, setEditingText] = useState('');
   const [error, setError] = useState<string>('');
+  const [progressMessage, setProgressMessage] = useState<string>('Preparing to generate drafts...');
   const [aiService] = useState(() => new AIService());
 
-  // Get emails that need responses
-  const emailsNeedingResponse = emails.filter(email => email.requiresResponse);
 
   useEffect(() => {
     async function generateDrafts() {
       try {
         setState('generating');
-        const emailDrafts = await aiService.generateEmailDrafts(emailsNeedingResponse);
-        setDrafts(emailDrafts);
-        if (emailDrafts.length > 0) {
+        
+        // Initialize AI service if not already done
+        if (!aiService.hasApiKey()) {
+          setProgressMessage('Checking API configuration...');
+        } else {
+          setProgressMessage('Loading personalized writing style...');
+        }
+        await aiService.initialize();
+        
+        // Set progress callback
+        aiService.setProgressCallback((message) => {
+          setProgressMessage(message);
+        });
+        
+        // Generate drafts with progress updates for ALL emails
+        const emailDrafts = await aiService.generateEmailDrafts(emails);
+        
+        // Filter out emails that don't need responses
+        const draftsNeedingReview = emailDrafts.filter(draft => draft.draftContent !== '');
+        
+        setDrafts(draftsNeedingReview);
+        if (draftsNeedingReview.length > 0) {
           setState('reviewing');
         } else {
           // No emails need responses, go directly to complete
@@ -49,7 +67,7 @@ const DraftReview: React.FC<DraftReviewProps> = ({
     }
 
     generateDrafts();
-  }, [emailsNeedingResponse, aiService, onComplete]);
+  }, [emails, aiService, onComplete]);
 
   useInput((input, key) => {
     if (state === 'reviewing') {
@@ -82,7 +100,7 @@ const DraftReview: React.FC<DraftReviewProps> = ({
   const getCurrentEmail = (): Email | undefined => {
     const currentDraft = drafts[currentDraftIndex];
     if (!currentDraft) return undefined;
-    return emailsNeedingResponse.find(email => email.id === currentDraft.emailId);
+    return emails.find(email => email.id === currentDraft.emailId);
   };
 
   const getCurrentDraft = (): EmailDraft | undefined => {
@@ -120,6 +138,28 @@ const DraftReview: React.FC<DraftReviewProps> = ({
     moveToNext();
   };
 
+  const handleAIImprovement = async (feedback: string) => {
+    try {
+      setState('clarifying');
+      const currentEmail = getCurrentEmail();
+      const currentDraft = getCurrentDraft();
+      
+      if (currentEmail && currentDraft) {
+        const improvedDraft = await aiService.improveEmailDraft(
+          currentDraft.editedContent || currentDraft.draftContent,
+          feedback,
+          currentEmail
+        );
+        
+        setEditingText(improvedDraft);
+        setState('editing');
+      }
+    } catch (error) {
+      console.error('Failed to improve draft:', error);
+      setState('editing');
+    }
+  };
+
   const cancelEditing = () => {
     setEditingText('');
     setState('reviewing');
@@ -155,11 +195,18 @@ const DraftReview: React.FC<DraftReviewProps> = ({
           <Text color="cyan">
             <Spinner type="dots" />
           </Text>
-          <Text color="cyan"> Generating AI draft replies...</Text>
+          <Text color="cyan"> {progressMessage}</Text>
         </Box>
-        <Text color="gray">
-          Creating responses for {emailsNeedingResponse.length} emails that need replies.
-        </Text>
+        <Box marginBottom={1}>
+          <Text color="gray">
+            Processing {emails.filter(e => e.requiresResponse).length} emails that need responses...
+          </Text>
+        </Box>
+        {aiService.hasApiKey() ? (
+          <Text color="green">✓ Using personalized AI to draft contextual replies</Text>
+        ) : (
+          <Text color="yellow">⚠ Using pattern-based drafts (configure API key for better results)</Text>
+        )}
       </Box>
     );
   }
@@ -224,6 +271,12 @@ const DraftReview: React.FC<DraftReviewProps> = ({
 
         <Box flexDirection="column">
           <Text color="cyan">Press [Enter] to save, [Escape] to cancel</Text>
+          <Text color="gray" dimColor>
+            Tip: Start your message with "AI:" to get Claude's help improving the draft
+          </Text>
+          <Text color="gray" dimColor>
+            Example: "AI: make this more formal" or "AI: add urgency"
+          </Text>
         </Box>
       </Box>
     );
