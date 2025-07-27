@@ -2,16 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import { MockInboxService } from './services/mockInbox.js';
 import Dashboard from './components/Dashboard.js';
-import BatchSummary from './components/BatchSummary.js';
 import DraftReview from './components/DraftReview.js';
-import SendConfirm from './components/SendConfirm.js';
 const App = ({ resetInbox = false, debug = false }) => {
     const [state, setState] = useState('loading');
     const [error, setError] = useState('');
     const [inboxService] = useState(() => new MockInboxService());
-    const [currentBatch, setCurrentBatch] = useState([]);
-    const [currentDrafts, setCurrentDrafts] = useState([]);
-    const [batchOffset, setBatchOffset] = useState(0);
+    const [allUnreadEmails, setAllUnreadEmails] = useState([]);
+    const [processedDrafts, setProcessedDrafts] = useState([]);
     const { exit } = useApp();
     useEffect(() => {
         async function initializeApp() {
@@ -34,39 +31,38 @@ const App = ({ resetInbox = false, debug = false }) => {
             exit();
         }
     });
-    const handleStartBatch = () => {
-        const batch = inboxService.getEmailBatch(10, batchOffset);
-        setCurrentBatch(batch);
-        setState('summary');
-    };
-    const handleSummaryComplete = () => {
+    const handleStartProcessing = () => {
+        const unreadEmails = inboxService.getUnreadEmails();
+        setAllUnreadEmails(unreadEmails);
         setState('review');
     };
-    const handleReviewComplete = (drafts) => {
-        setCurrentDrafts(drafts);
-        setState('confirm');
-    };
-    const handleSendComplete = () => {
-        // Check if there are more emails to process
+    const handleReviewComplete = async (drafts) => {
+        // Mark all processed emails as read
+        const emailIdsToMarkRead = drafts
+            .filter(draft => draft.status === 'accepted' || draft.status === 'skipped')
+            .map(draft => draft.emailId);
+        if (emailIdsToMarkRead.length > 0) {
+            await inboxService.markEmailsAsRead(emailIdsToMarkRead);
+        }
+        // Check if there are more unread emails
         const remainingUnread = inboxService.getUnreadCount();
         if (remainingUnread > 0) {
-            // Move to next batch
-            setBatchOffset(batchOffset + 10);
-            setState('dashboard');
+            // Continue with remaining emails
+            handleStartProcessing();
         }
         else {
             setState('complete');
         }
     };
+    const handleEmailProcessed = async (emailId, action) => {
+        // Mark email as read in background
+        if (action === 'accepted' || action === 'skipped') {
+            await inboxService.markEmailAsRead(emailId);
+        }
+    };
     const handleBack = () => {
-        if (state === 'summary') {
+        if (state === 'review') {
             setState('dashboard');
-        }
-        else if (state === 'review') {
-            setState('summary');
-        }
-        else if (state === 'confirm') {
-            setState('review');
         }
     };
     if (state === 'loading') {
@@ -88,16 +84,10 @@ const App = ({ resetInbox = false, debug = false }) => {
             React.createElement(Text, { color: "cyan" }, "Press Ctrl+C to exit")));
     }
     if (state === 'dashboard') {
-        return (React.createElement(Dashboard, { inboxService: inboxService, debug: debug, onStartBatch: handleStartBatch, batchOffset: batchOffset }));
-    }
-    if (state === 'summary') {
-        return (React.createElement(BatchSummary, { emails: currentBatch, onContinue: handleSummaryComplete, onBack: handleBack, debug: debug }));
+        return (React.createElement(Dashboard, { inboxService: inboxService, debug: debug, onStartBatch: handleStartProcessing, batchOffset: 0 }));
     }
     if (state === 'review') {
-        return (React.createElement(DraftReview, { emails: currentBatch, onComplete: handleReviewComplete, onBack: handleBack, debug: debug }));
-    }
-    if (state === 'confirm') {
-        return (React.createElement(SendConfirm, { emails: currentBatch, drafts: currentDrafts, inboxService: inboxService, onComplete: handleSendComplete, onBack: handleBack, debug: debug }));
+        return (React.createElement(DraftReview, { emails: allUnreadEmails, onComplete: handleReviewComplete, onBack: handleBack, debug: debug, onEmailProcessed: handleEmailProcessed }));
     }
     return null;
 };

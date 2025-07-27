@@ -36,7 +36,14 @@ const DraftReview: React.FC<DraftReviewProps> = ({
   const [editingText, setEditingText] = useState('');
   const [error, setError] = useState<string>('');
   const [progressMessage, setProgressMessage] = useState<string>('Preparing to process emails...');
-  const [aiService] = useState(() => new AIService());
+  const [aiService] = useState(() => {
+    const service = new AIService();
+    // Set max listeners to prevent warning
+    if (typeof process !== 'undefined' && process.setMaxListeners) {
+      process.setMaxListeners(20);
+    }
+    return service;
+  });
 
 
   useEffect(() => {
@@ -68,7 +75,7 @@ const DraftReview: React.FC<DraftReviewProps> = ({
     if (processingIndex > 0 && processingIndex < emails.length) {
       processNextEmail();
     }
-  }, [processingIndex]);
+  }, [processingIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const processNextEmail = async () => {
     if (processingIndex >= emails.length) {

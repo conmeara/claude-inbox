@@ -7,11 +7,20 @@ const BatchSummary = ({ emails, onContinue, onBack, debug = false }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [showPrompt, setShowPrompt] = useState(false);
+    const [progressMessage, setProgressMessage] = useState('Initializing AI assistant...');
     const [aiService] = useState(() => new AIService());
     useEffect(() => {
         async function generateSummaries() {
             try {
                 setLoading(true);
+                // Initialize AI service with user's writing style
+                setProgressMessage('Loading personalized settings...');
+                await aiService.initialize();
+                // Set progress callback
+                aiService.setProgressCallback((message) => {
+                    setProgressMessage(message);
+                });
+                // Generate summaries with progress updates
                 const emailSummaries = await aiService.summarizeEmailBatch(emails);
                 setSummaries(emailSummaries);
                 setShowPrompt(true);
@@ -48,10 +57,14 @@ const BatchSummary = ({ emails, onContinue, onBack, debug = false }) => {
                 React.createElement(Text, { color: "cyan" },
                     React.createElement(Spinner, { type: "dots" })),
                 React.createElement(Text, { color: "cyan" },
-                    " Generating AI summaries for ",
+                    " ",
+                    progressMessage)),
+            React.createElement(Box, { marginBottom: 1 },
+                React.createElement(Text, { color: "gray" },
+                    "Processing ",
                     emails.length,
-                    " emails...")),
-            React.createElement(Text, { color: "gray" }, "This may take a few moments while Claude analyzes each email.")));
+                    " emails in batch mode for faster results...")),
+            aiService.hasApiKey() ? (React.createElement(Text, { color: "green" }, "\u2713 Using Claude API for intelligent summarization")) : (React.createElement(Text, { color: "yellow" }, "\u26A0 No API key found - using fallback patterns"))));
     }
     if (error) {
         return (React.createElement(Box, { flexDirection: "column", paddingY: 1 },

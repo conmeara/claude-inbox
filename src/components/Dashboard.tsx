@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
+import TextInput from 'ink-text-input';
 import { MockInboxService } from '../services/mockInbox.js';
 import { Email } from '../types/email.js';
 import { ConfigService } from '../services/config.js';
@@ -17,6 +18,7 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
   const [totalUnread, setTotalUnread] = useState(0);
   const [batchNumber, setBatchNumber] = useState(1);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [searchText, setSearchText] = useState('');
   const configService = new ConfigService();
 
   useEffect(() => {
@@ -32,7 +34,7 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
 
   useInput((input, key) => {
     if (showPrompt) {
-      if (input.toLowerCase() === 'y' || key.return) {
+      if (key.tab) {
         onStartBatch();
       } else if (input.toLowerCase() === 'n') {
         process.exit(0);
@@ -56,67 +58,69 @@ const Dashboard: React.FC<DashboardProps> = ({ inboxService, debug = false, onSt
 
   return (
     <Box flexDirection="column" paddingY={1}>
-      {/* Header */}
-      <Box marginBottom={1}>
-        <Text color="cyan" bold>
-          📧 Claude Inbox - Gmail Assistant
-        </Text>
-      </Box>
-
-      {/* Inbox Summary */}
-      <Box marginBottom={1}>
-        <Text>
-          Unread Emails: <Text bold color="yellow">{totalUnread}</Text>
-        </Text>
-        <Text color="gray"> • AI Mode: </Text>
-        <Text color={configService.hasApiKey() ? "green" : "yellow"}>
-          {configService.hasApiKey() ? "Claude API" : "Pattern Matching"}
-        </Text>
-      </Box>
-
-      {/* Email Preview */}
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="cyan">
-          First {Math.min(currentBatch.length, 10)} unread emails:
-        </Text>
-        <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
-        
-        {currentBatch.slice(0, 10).map((email, index) => (
-          <Box key={email.id} marginLeft={2}>
-            <Text color="white">
-              {(index + 1).toString().padStart(2, ' ')}. 
-            </Text>
-            <Text color="gray"> [</Text>
-            <Text color={email.requiresResponse ? "yellow" : "blue"}>
-              {email.requiresResponse ? "Needs Reply" : "Info Only"}
-            </Text>
-            <Text color="gray">] </Text>
-            <Text bold>"{truncateSubject(email.subject)}"</Text>
-            <Text color="gray"> - from </Text>
-            <Text color="green">{email.from.name}</Text>
-            <Text color="gray">, </Text>
-            <Text color="gray">{formatDate(email.date)}</Text>
-          </Box>
-        ))}
-      </Box>
-
-      {totalUnread > 10 && (
+      {/* Main Container with Border */}
+      <Box borderStyle="round" borderColor="#CC785C" padding={1} flexDirection="column">
+        {/* Header */}
         <Box marginBottom={1}>
-          <Text color="gray">
-            ({totalUnread - 10} more unread emails)
+          <Text color="yellow">
+            ✉️  Welcome to Claude Inbox!
           </Text>
         </Box>
-      )}
 
-      {/* Processing Prompt */}
+        {/* Inbox Summary */}
+        <Box marginBottom={1}>
+          <Text>
+            Unread Emails: <Text bold color="yellow">{totalUnread}</Text>
+          </Text>
+          <Text color="gray"> • AI Mode: </Text>
+          <Text color={configService.hasApiKey() ? "green" : "yellow"}>
+            {configService.hasApiKey() ? "Claude API" : "Pattern Matching"}
+          </Text>
+        </Box>
+
+        {/* Email Preview */}
+        <Box flexDirection="column" marginBottom={1}>
+          <Text color="cyan">
+            First {Math.min(currentBatch.length, 10)} unread emails:
+          </Text>
+          <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
+          
+          {currentBatch.slice(0, 10).map((email, index) => (
+            <Box key={email.id} marginLeft={2}>
+              <Text color="white">
+                {(index + 1).toString().padStart(2, ' ')}. 
+              </Text>
+              <Text bold>"{truncateSubject(email.subject)}"</Text>
+              <Text color="gray"> - from </Text>
+              <Text color="green">{email.from.name}</Text>
+              <Text color="gray">, </Text>
+              <Text color="gray">{formatDate(email.date)}</Text>
+            </Box>
+          ))}
+        </Box>
+
+        {totalUnread > 10 && (
+          <Box marginBottom={1}>
+            <Text color="gray">
+              ({totalUnread - 10} more unread emails)
+            </Text>
+          </Box>
+        )}
+      </Box>
+
+      {/* Text Input Box and Navigation */}
       {showPrompt && (
         <Box flexDirection="column" marginTop={1}>
-          <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
-          <Text>
-            Process all {totalUnread} unread emails now? 
-          </Text>
-          <Text color="cyan">
-            Press [Y] to continue, [N] to exit
+          <Box borderStyle="round" borderColor="white" borderDimColor paddingX={1} flexDirection="row" alignItems="center">
+            <Text color="gray">{'>'} </Text>
+            <TextInput
+              value={searchText}
+              onChange={setSearchText}
+              placeholder="Ready to process all emails..."
+            />
+          </Box>
+          <Text color="white" dimColor>
+            Tab to Start
           </Text>
         </Box>
       )}
