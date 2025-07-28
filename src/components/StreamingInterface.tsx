@@ -7,6 +7,31 @@ import { Email, EmailDraft } from '../types/email.js';
 import { AIService } from '../services/ai.js';
 import { ConfigService } from '../services/config.js';
 
+// Animated dot component like Claude Code
+const AnimatedDot: React.FC<{ status: 'processing' | 'success' | 'error' | 'default' }> = ({ status }) => {
+  const [dotIndex, setDotIndex] = useState(0);
+  const dots = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  
+  useEffect(() => {
+    if (status === 'processing') {
+      const interval = setInterval(() => {
+        setDotIndex((prev) => (prev + 1) % dots.length);
+      }, 80);
+      return () => clearInterval(interval);
+    }
+  }, [status, dots.length]);
+
+  if (status === 'processing') {
+    return <Text color="white">{dots[dotIndex]} </Text>;
+  } else if (status === 'success') {
+    return <Text color="green">● </Text>;
+  } else if (status === 'error') {
+    return <Text color="red">● </Text>;
+  } else {
+    return <Text color="white">● </Text>;
+  }
+};
+
 interface StreamingInterfaceProps {
   inboxService: MockInboxService;
   debug?: boolean;
@@ -49,6 +74,9 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [editingText, setEditingText] = useState('');
+  const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isStatusComplete, setIsStatusComplete] = useState(false);
   
   // Services
   const [aiService] = useState(() => new AIService());
@@ -201,6 +229,8 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
   const handleChatSubmit = async () => {
     if (!inputText.trim()) return;
     
+    console.log('handleChatSubmit called with:', inputText);
+    
     // Add user message
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -211,49 +241,55 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
     setChatMessages(prev => [...prev, userMessage]);
     
     // Handle AI improvement requests
-    if (inputText.toLowerCase().startsWith('ai:')) {
-      const feedback = inputText.substring(3).trim();
-      const currentEmail = processedEmails[currentEmailIndex];
+    const currentEmail = processedEmails[currentEmailIndex];
+    console.log('Current email:', currentEmail);
+    console.log('Has draft:', !!currentEmail?.draft);
+    
+    if (currentEmail?.draft) {
+      // Any message with a current draft is treated as an AI improvement request
+      const feedback = inputText.toLowerCase().startsWith('ai:') 
+        ? inputText.substring(3).trim() 
+        : inputText;
       
-      if (currentEmail?.draft) {
-        try {
-          const improvedDraft = await aiService.improveEmailDraft(
-            currentEmail.draft.editedContent || currentEmail.draft.draftContent,
-            feedback,
-            currentEmail.email
-          );
-          
-          // Update the draft
-          const updatedDrafts = allDrafts.map(d => 
-            d.emailId === currentEmail.draft!.emailId 
-              ? { ...d, editedContent: improvedDraft }
-              : d
-          );
-          setAllDrafts(updatedDrafts);
-          
-          setProcessedEmails(prev => prev.map((pe, index) => 
-            index === currentEmailIndex 
-              ? { ...pe, draft: { ...pe.draft!, editedContent: improvedDraft } }
-              : pe
-          ));
-          
-          // Add AI response
-          const aiMessage: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            text: 'Draft updated successfully!',
-            isUser: false,
-            timestamp: new Date()
-          };
-          setChatMessages(prev => [...prev, aiMessage]);
-        } catch (error) {
-          const errorMessage: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            text: 'Failed to improve draft. Please try again.',
-            isUser: false,
-            timestamp: new Date()
-          };
-          setChatMessages(prev => [...prev, errorMessage]);
-        }
+      try {
+        setIsProcessing(true);
+        const improvedDraft = await aiService.improveEmailDraft(
+          currentEmail.draft.editedContent || currentEmail.draft.draftContent,
+          feedback,
+          currentEmail.email,
+          (status) => {
+            setProcessingStatus(status);
+            setIsStatusComplete(status.includes('successfully') || status.includes('complete'));
+          }
+        );
+        
+        // Update the draft
+        const updatedDrafts = allDrafts.map(d => 
+          d.emailId === currentEmail.draft!.emailId 
+            ? { ...d, editedContent: improvedDraft }
+            : d
+        );
+        setAllDrafts(updatedDrafts);
+        
+        setProcessedEmails(prev => prev.map((pe, index) => 
+          index === currentEmailIndex 
+            ? { ...pe, draft: { ...pe.draft!, editedContent: improvedDraft } }
+            : pe
+        ));
+        
+        // Show completion with green bullet
+        setTimeout(() => {
+          setProcessingStatus('');
+          setIsStatusComplete(false);
+        }, 1500);
+      } catch (error) {
+        setProcessingStatus('Failed to improve draft. Please try again.');
+        setIsStatusComplete(false);
+        setTimeout(() => {
+          setProcessingStatus('');
+        }, 2000);
+      } finally {
+        setIsProcessing(false);
       }
     }
     
@@ -261,13 +297,14 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
   };
 
   useInput((input, key) => {
+    // Don't interfere with text input when user is typing
     if (state === 'dashboard') {
       if (key.tab) {
         handleStartStreaming();
       } else if (key.escape) {
         process.exit(0);
       }
-    } else if (state === 'streaming' && !isEditingMode) {
+    } else if (state === 'streaming' && !isEditingMode && !isProcessing) {
       if (key.tab) {
         handleAcceptDraft();
       } else if (key.rightArrow) {
@@ -303,7 +340,7 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
       {/* Header */}
       <Box marginBottom={1}>
         <Text color="yellow">
-          ✉️  Welcome to Claude Inbox!
+          Welcome to Claude Inbox!
         </Text>
       </Box>
 
@@ -349,24 +386,116 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
     </Box>
   );
 
-  const renderEmailCard = (processedEmail: ProcessedEmail, index: number) => {
+  const renderEmailCard = (processedEmail: ProcessedEmail, index: number, isLast: boolean = false) => {
     const { email, summary, draft, status } = processedEmail;
     const isActive = index === currentEmailIndex;
     
+    // For non-active emails, render normally
+    if (!isActive) {
+      return (
+        <Box 
+          key={email.id} 
+          flexDirection="column" 
+          marginBottom={1}
+          borderStyle="single"
+          borderColor="gray"
+          padding={1}
+        >
+          {/* Email Header */}
+          <Box marginBottom={1}>
+            <AnimatedDot 
+              status={
+                status === 'processing' 
+                  ? 'processing' 
+                  : status === 'accepted' 
+                    ? 'success'
+                    : status === 'skipped'
+                      ? 'default'
+                      : 'default'
+              } 
+            />
+            <Text bold>Email {index + 1} of {allEmails.length}</Text>
+            {status === 'processing' && (
+              <Text color="gray">
+                {' '}<Spinner type="dots" /> Processing...
+              </Text>
+            )}
+          </Box>
+
+          {/* Sender */}
+          <Box>
+            <Text color="gray">├── </Text>
+            <Text>{email.from.name}</Text>
+          </Box>
+
+          {/* Subject */}
+          <Box>
+            <Text color="gray">├── </Text>
+            <Text color="gray">{email.subject}</Text>
+          </Box>
+
+          {/* Date */}
+          <Box>
+            <Text color="gray">{summary ? "├── " : "└── "}</Text>
+            <Text color="gray" dimColor>{formatDate(email.date)}</Text>
+          </Box>
+
+          {/* Summary */}
+          {summary && (
+            <Box>
+              <Text color="gray">└── </Text>
+              <Text>Summary: {summary}</Text>
+            </Box>
+          )}
+
+          {/* Status */}
+          {status === 'accepted' && (
+            <Box marginTop={1}>
+              <Text color="green">Draft accepted</Text>
+            </Box>
+          )}
+          {status === 'skipped' && (
+            <Box marginTop={1}>
+              <Text color="gray">Skipped</Text>
+            </Box>
+          )}
+        </Box>
+      );
+    }
+    
+    // For active email, we'll render it differently (merged with input)
+    // This will be handled in the main render
+    return null;
+  };
+
+  const renderActiveEmailCard = () => {
+    const processedEmail = processedEmails[currentEmailIndex];
+    if (!processedEmail) return null;
+    
+    const { email, summary, draft, status } = processedEmail;
+    
     return (
       <Box 
-        key={email.id} 
         flexDirection="column" 
         marginBottom={1}
-        borderStyle={isActive ? "round" : "single"}
-        borderColor={isActive ? "#CC785C" : "gray"}
+        borderStyle="round"
+        borderColor="#CC785C"
         padding={1}
       >
         {/* Email Header */}
         <Box marginBottom={1}>
-          <Text color="cyan" bold>
-            📧 Email {index + 1} of {allEmails.length}
-          </Text>
+          <AnimatedDot 
+            status={
+              status === 'processing' 
+                ? 'processing' 
+                : status === 'accepted' 
+                  ? 'success'
+                  : status === 'skipped'
+                    ? 'default'
+                    : 'default'
+            } 
+          />
+          <Text bold>Email {currentEmailIndex + 1} of {allEmails.length}</Text>
           {status === 'processing' && (
             <Text color="gray">
               {' '}<Spinner type="dots" /> Processing...
@@ -374,48 +503,92 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
           )}
         </Box>
 
-        {/* Email Context */}
-        <Box flexDirection="column" marginBottom={1}>
-          <Text color="gray">From: </Text>
-          <Text color="green" bold>{email.from.name}</Text>
-          <Text color="gray"> - </Text>
-          <Text color="white">"{email.subject}"</Text>
-          <Text color="gray"> - </Text>
-          <Text color="gray">{formatDate(email.date)}</Text>
+        {/* Sender */}
+        <Box>
+          <Text color="gray">├── </Text>
+          <Text>{email.from.name}</Text>
+        </Box>
+
+        {/* Subject */}
+        <Box>
+          <Text color="gray">├── </Text>
+          <Text>{email.subject}</Text>
+        </Box>
+
+        {/* Date */}
+        <Box>
+          <Text color="gray">{summary ? "├── " : "└── "}</Text>
+          <Text color="gray" dimColor>{formatDate(email.date)}</Text>
         </Box>
 
         {/* Summary */}
         {summary && (
-          <Box flexDirection="column" marginBottom={1}>
-            <Text color="yellow">💡 Summary:</Text>
-            <Box marginLeft={2}>
-              <Text color="white">{summary}</Text>
-            </Box>
+          <Box>
+            <Text color="gray">└── </Text>
+            <Text>Summary: {summary}</Text>
           </Box>
         )}
 
         {/* Draft */}
         {draft && (
-          <Box flexDirection="column" marginBottom={1}>
-            <Text color="yellow" bold>📝 Draft Reply:</Text>
-            <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
-            <Box marginLeft={2} marginY={1}>
+          <>
+            <Box marginTop={1}>
+              <AnimatedDot status="default" />
+              <Text>Draft Reply:</Text>
+            </Box>
+            <Box marginLeft={2} marginBottom={1}>
               <Text color="white">{draft.editedContent || draft.draftContent}</Text>
             </Box>
-            <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
+          </>
+        )}
+
+        {/* Processing Status */}
+        {processingStatus && (
+          <Box marginBottom={1}>
+            <AnimatedDot 
+              status={
+                processingStatus.includes('Failed') || processingStatus.includes('Error') 
+                  ? 'error' 
+                  : isStatusComplete 
+                    ? 'success' 
+                    : 'processing'
+              } 
+            />
+            <Text color="gray" dimColor>
+              {processingStatus}
+            </Text>
           </Box>
         )}
 
-        {/* Status indicator */}
-        {status === 'accepted' && (
-          <Text color="green">✅ Draft accepted</Text>
+        {/* Chat Messages */}
+        {chatMessages.length > 0 && (
+          <Box flexDirection="column" marginTop={1} marginBottom={1}>
+            {chatMessages.slice(-3).map((message, idx) => (
+              <Box key={message.id} marginBottom={1}>
+                <Text color="gray">{idx === chatMessages.slice(-3).length - 1 ? "└── " : "├── "}</Text>
+                <Text color={message.isUser ? "cyan" : "white"}>
+                  {message.isUser ? "You: " : ""}{message.text}
+                </Text>
+              </Box>
+            ))}
+          </Box>
         )}
-        {status === 'skipped' && (
-          <Text color="gray">⏭️ Skipped</Text>
-        )}
-        {status === 'edited' && (
-          <Text color="yellow">✏️ Draft edited</Text>
-        )}
+
+        {/* Separator */}
+        <Box marginTop={1} marginBottom={1}>
+          <Text color="gray">─────────────────────────────────────────────────────────────────────</Text>
+        </Box>
+
+        {/* Text Input */}
+        <Box flexDirection="row" alignItems="center">
+          <Text color="gray">{'>'} </Text>
+          <TextInput
+            value={inputText}
+            onChange={setInputText}
+            onSubmit={handleChatSubmit}
+            placeholder="Chat with Claude or use controls..."
+          />
+        </Box>
       </Box>
     );
   };
@@ -440,44 +613,44 @@ const StreamingInterface: React.FC<StreamingInterfaceProps> = ({
       {/* Email Stream Section */}
       {state === 'streaming' && (
         <Box flexDirection="column">
+          {/* Render completed/skipped emails */}
           {processedEmails
-            .filter((_, index) => index <= currentEmailIndex)
+            .filter((_, index) => index < currentEmailIndex)
             .map((processedEmail, index) => 
               renderEmailCard(processedEmail, index)
             )}
+          
+          {/* Render the active email with merged input box */}
+          {processedEmails[currentEmailIndex] && renderActiveEmailCard()}
+          
+          {/* Controls - outside the active email box */}
+          {processedEmails[currentEmailIndex] && (
+            <Box marginTop={1}>
+              <Text color="white" dimColor>
+                Tab: Accept • →: Skip • ↓: Edit • Esc: Back
+              </Text>
+            </Box>
+          )}
         </Box>
       )}
       
-      {/* Chat Messages */}
-      {chatMessages.length > 0 && renderChatMessages()}
-      
-      {/* Fixed Input Area */}
-      <Box flexDirection="column" marginTop={1}>
-        <Box borderStyle="round" borderColor="white" borderDimColor paddingX={1} flexDirection="row" alignItems="center">
-          <Text color="gray">{'>'} </Text>
-          <TextInput
-            value={inputText}
-            onChange={setInputText}
-            onSubmit={handleChatSubmit}
-            placeholder={
-              state === 'dashboard' 
-                ? "Ready to process all emails..." 
-                : "Chat with Claude or use controls..."
-            }
-          />
-        </Box>
-        
-        {/* Controls */}
-        {state === 'dashboard' ? (
+      {/* Dashboard Input Area - only show when not streaming */}
+      {state === 'dashboard' && (
+        <Box flexDirection="column" marginTop={1}>
+          <Box borderStyle="round" borderColor="white" borderDimColor paddingX={1} flexDirection="row" alignItems="center">
+            <Text color="gray">{'>'} </Text>
+            <TextInput
+              value={inputText}
+              onChange={setInputText}
+              onSubmit={handleChatSubmit}
+              placeholder="Ready to process all emails..."
+            />
+          </Box>
           <Text color="white" dimColor>
             Tab to Start • Esc to Exit
           </Text>
-        ) : (
-          <Text color="white" dimColor>
-            Tab: Accept • →: Skip • ↓: Edit • Esc: Back
-          </Text>
-        )}
-      </Box>
+        </Box>
+      )}
 
       {/* Debug Info */}
       {debug && state === 'streaming' && (

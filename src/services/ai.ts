@@ -49,7 +49,7 @@ Your tasks:
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  private async callClaude(prompt: string, retries = 0): Promise<string> {
+  private async callClaude(prompt: string, retries = 0, onProgress?: (message: string) => void): Promise<string> {
     // Check if we have an API key available
     if (!this.configService.hasApiKey()) {
       throw new Error('No Anthropic API key available. Use --setup to configure or set ANTHROPIC_API_KEY environment variable.');
@@ -67,9 +67,17 @@ Your tasks:
           maxTurns: 1
         }
       })) {
+        // Stream progress messages to the UI
+        if (onProgress && message.type === 'system' && message.subtype === 'init') {
+          onProgress?.('Initializing Claude...');
+        } else if (onProgress && message.type === 'assistant') {
+          onProgress?.('Processing response...');
+        }
+        
         // The Claude Code SDK returns the final result as the last message
         if (message.type === 'result' && 'result' in message) {
           response = message.result;
+          onProgress?.('Response complete');
         }
       }
       
@@ -82,7 +90,7 @@ Your tasks:
       if (retries < this.maxRetries) {
         console.warn(`Claude API call failed, retrying (${retries + 1}/${this.maxRetries})...`);
         await this.delay(this.retryDelay * (retries + 1)); // Exponential backoff
-        return this.callClaude(prompt, retries + 1);
+        return this.callClaude(prompt, retries + 1, onProgress);
       }
       throw error;
     }
@@ -425,7 +433,7 @@ Draft a polite email asking for this specific clarification while acknowledging 
     }
   }
 
-  async improveEmailDraft(originalDraft: string, userFeedback: string, email: Email): Promise<string> {
+  async improveEmailDraft(originalDraft: string, userFeedback: string, email: Email, onProgress?: (message: string) => void): Promise<string> {
     const prompt = `Please revise this email draft based on the user's feedback.
 
 Original email context:
@@ -441,8 +449,18 @@ ${userFeedback}
 Provide an improved draft that addresses the feedback while maintaining professionalism.`;
 
     try {
-      return await this.callClaude(prompt);
+      onProgress?.('Analyzing user feedback...');
+      const result = await this.callClaude(prompt, 0, (msg) => {
+        // Map Claude SDK messages to our progress messages
+        if (msg === 'Initializing Claude...') {
+          onProgress?.('Revising email draft...');
+        } else if (msg === 'Response complete') {
+          onProgress?.('Draft updated successfully');
+        }
+      });
+      return result;
     } catch (error) {
+      onProgress?.('Failed to improve draft');
       // Fallback: try to incorporate feedback simply
       return originalDraft.replace('Best regards', `\n\n${userFeedback}\n\nBest regards`);
     }

@@ -4,6 +4,33 @@ import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import { AIService } from '../services/ai.js';
 import { ConfigService } from '../services/config.js';
+// Animated dot component like Claude Code
+const AnimatedDot = ({ status }) => {
+    const [dotIndex, setDotIndex] = useState(0);
+    const dots = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    useEffect(() => {
+        if (status === 'processing') {
+            const interval = setInterval(() => {
+                setDotIndex((prev) => (prev + 1) % dots.length);
+            }, 80);
+            return () => clearInterval(interval);
+        }
+    }, [status, dots.length]);
+    if (status === 'processing') {
+        return React.createElement(Text, { color: "white" },
+            dots[dotIndex],
+            " ");
+    }
+    else if (status === 'success') {
+        return React.createElement(Text, { color: "green" }, "\u25CF ");
+    }
+    else if (status === 'error') {
+        return React.createElement(Text, { color: "red" }, "\u25CF ");
+    }
+    else {
+        return React.createElement(Text, { color: "white" }, "\u25CF ");
+    }
+};
 const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack }) => {
     const [state, setState] = useState('dashboard');
     const [dashboardVisible, setDashboardVisible] = useState(true);
@@ -17,6 +44,9 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
     const [chatMessages, setChatMessages] = useState([]);
     const [isEditingMode, setIsEditingMode] = useState(false);
     const [editingText, setEditingText] = useState('');
+    const [processingStatus, setProcessingStatus] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [isStatusComplete, setIsStatusComplete] = useState(false);
     // Services
     const [aiService] = useState(() => new AIService());
     const [configService] = useState(() => new ConfigService());
@@ -135,6 +165,7 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
     const handleChatSubmit = async () => {
         if (!inputText.trim())
             return;
+        console.log('handleChatSubmit called with:', inputText);
         // Add user message
         const userMessage = {
             id: Date.now().toString(),
@@ -144,43 +175,49 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
         };
         setChatMessages(prev => [...prev, userMessage]);
         // Handle AI improvement requests
-        if (inputText.toLowerCase().startsWith('ai:')) {
-            const feedback = inputText.substring(3).trim();
-            const currentEmail = processedEmails[currentEmailIndex];
-            if (currentEmail?.draft) {
-                try {
-                    const improvedDraft = await aiService.improveEmailDraft(currentEmail.draft.editedContent || currentEmail.draft.draftContent, feedback, currentEmail.email);
-                    // Update the draft
-                    const updatedDrafts = allDrafts.map(d => d.emailId === currentEmail.draft.emailId
-                        ? { ...d, editedContent: improvedDraft }
-                        : d);
-                    setAllDrafts(updatedDrafts);
-                    setProcessedEmails(prev => prev.map((pe, index) => index === currentEmailIndex
-                        ? { ...pe, draft: { ...pe.draft, editedContent: improvedDraft } }
-                        : pe));
-                    // Add AI response
-                    const aiMessage = {
-                        id: (Date.now() + 1).toString(),
-                        text: 'Draft updated successfully!',
-                        isUser: false,
-                        timestamp: new Date()
-                    };
-                    setChatMessages(prev => [...prev, aiMessage]);
-                }
-                catch (error) {
-                    const errorMessage = {
-                        id: (Date.now() + 1).toString(),
-                        text: 'Failed to improve draft. Please try again.',
-                        isUser: false,
-                        timestamp: new Date()
-                    };
-                    setChatMessages(prev => [...prev, errorMessage]);
-                }
+        const currentEmail = processedEmails[currentEmailIndex];
+        console.log('Current email:', currentEmail);
+        console.log('Has draft:', !!currentEmail?.draft);
+        if (currentEmail?.draft) {
+            // Any message with a current draft is treated as an AI improvement request
+            const feedback = inputText.toLowerCase().startsWith('ai:')
+                ? inputText.substring(3).trim()
+                : inputText;
+            try {
+                setIsProcessing(true);
+                const improvedDraft = await aiService.improveEmailDraft(currentEmail.draft.editedContent || currentEmail.draft.draftContent, feedback, currentEmail.email, (status) => {
+                    setProcessingStatus(status);
+                    setIsStatusComplete(status.includes('successfully') || status.includes('complete'));
+                });
+                // Update the draft
+                const updatedDrafts = allDrafts.map(d => d.emailId === currentEmail.draft.emailId
+                    ? { ...d, editedContent: improvedDraft }
+                    : d);
+                setAllDrafts(updatedDrafts);
+                setProcessedEmails(prev => prev.map((pe, index) => index === currentEmailIndex
+                    ? { ...pe, draft: { ...pe.draft, editedContent: improvedDraft } }
+                    : pe));
+                // Show completion with green bullet
+                setTimeout(() => {
+                    setProcessingStatus('');
+                    setIsStatusComplete(false);
+                }, 1500);
+            }
+            catch (error) {
+                setProcessingStatus('Failed to improve draft. Please try again.');
+                setIsStatusComplete(false);
+                setTimeout(() => {
+                    setProcessingStatus('');
+                }, 2000);
+            }
+            finally {
+                setIsProcessing(false);
             }
         }
         setInputText('');
     };
     useInput((input, key) => {
+        // Don't interfere with text input when user is typing
         if (state === 'dashboard') {
             if (key.tab) {
                 handleStartStreaming();
@@ -189,7 +226,7 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
                 process.exit(0);
             }
         }
-        else if (state === 'streaming' && !isEditingMode) {
+        else if (state === 'streaming' && !isEditingMode && !isProcessing) {
             if (key.tab) {
                 handleAcceptDraft();
             }
@@ -222,7 +259,7 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
     };
     const renderDashboard = () => (React.createElement(Box, { borderStyle: "round", borderColor: "#CC785C", padding: 1, flexDirection: "column" },
         React.createElement(Box, { marginBottom: 1 },
-            React.createElement(Text, { color: "yellow" }, "\u2709\uFE0F  Welcome to Claude Inbox!")),
+            React.createElement(Text, { color: "yellow" }, "Welcome to Claude Inbox!")),
         React.createElement(Box, { marginBottom: 1 },
             React.createElement(Text, null,
                 "Unread Emails: ",
@@ -252,43 +289,114 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
                 "(",
                 totalUnread - 10,
                 " more unread emails)")))));
-    const renderEmailCard = (processedEmail, index) => {
+    const renderEmailCard = (processedEmail, index, isLast = false) => {
         const { email, summary, draft, status } = processedEmail;
         const isActive = index === currentEmailIndex;
-        return (React.createElement(Box, { key: email.id, flexDirection: "column", marginBottom: 1, borderStyle: isActive ? "round" : "single", borderColor: isActive ? "#CC785C" : "gray", padding: 1 },
+        // For non-active emails, render normally
+        if (!isActive) {
+            return (React.createElement(Box, { key: email.id, flexDirection: "column", marginBottom: 1, borderStyle: "single", borderColor: "gray", padding: 1 },
+                React.createElement(Box, { marginBottom: 1 },
+                    React.createElement(AnimatedDot, { status: status === 'processing'
+                            ? 'processing'
+                            : status === 'accepted'
+                                ? 'success'
+                                : status === 'skipped'
+                                    ? 'default'
+                                    : 'default' }),
+                    React.createElement(Text, { bold: true },
+                        "Email ",
+                        index + 1,
+                        " of ",
+                        allEmails.length),
+                    status === 'processing' && (React.createElement(Text, { color: "gray" },
+                        ' ',
+                        React.createElement(Spinner, { type: "dots" }),
+                        " Processing..."))),
+                React.createElement(Box, null,
+                    React.createElement(Text, { color: "gray" }, "\u251C\u2500\u2500 "),
+                    React.createElement(Text, null, email.from.name)),
+                React.createElement(Box, null,
+                    React.createElement(Text, { color: "gray" }, "\u251C\u2500\u2500 "),
+                    React.createElement(Text, { color: "gray" }, email.subject)),
+                React.createElement(Box, null,
+                    React.createElement(Text, { color: "gray" }, summary ? "├── " : "└── "),
+                    React.createElement(Text, { color: "gray", dimColor: true }, formatDate(email.date))),
+                summary && (React.createElement(Box, null,
+                    React.createElement(Text, { color: "gray" }, "\u2514\u2500\u2500 "),
+                    React.createElement(Text, null,
+                        "Summary: ",
+                        summary))),
+                status === 'accepted' && (React.createElement(Box, { marginTop: 1 },
+                    React.createElement(Text, { color: "green" }, "Draft accepted"))),
+                status === 'skipped' && (React.createElement(Box, { marginTop: 1 },
+                    React.createElement(Text, { color: "gray" }, "Skipped")))));
+        }
+        // For active email, we'll render it differently (merged with input)
+        // This will be handled in the main render
+        return null;
+    };
+    const renderActiveEmailCard = () => {
+        const processedEmail = processedEmails[currentEmailIndex];
+        if (!processedEmail)
+            return null;
+        const { email, summary, draft, status } = processedEmail;
+        return (React.createElement(Box, { flexDirection: "column", marginBottom: 1, borderStyle: "round", borderColor: "#CC785C", padding: 1 },
             React.createElement(Box, { marginBottom: 1 },
-                React.createElement(Text, { color: "cyan", bold: true },
-                    "\uD83D\uDCE7 Email ",
-                    index + 1,
+                React.createElement(AnimatedDot, { status: status === 'processing'
+                        ? 'processing'
+                        : status === 'accepted'
+                            ? 'success'
+                            : status === 'skipped'
+                                ? 'default'
+                                : 'default' }),
+                React.createElement(Text, { bold: true },
+                    "Email ",
+                    currentEmailIndex + 1,
                     " of ",
                     allEmails.length),
                 status === 'processing' && (React.createElement(Text, { color: "gray" },
                     ' ',
                     React.createElement(Spinner, { type: "dots" }),
                     " Processing..."))),
-            React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
-                React.createElement(Text, { color: "gray" }, "From: "),
-                React.createElement(Text, { color: "green", bold: true }, email.from.name),
-                React.createElement(Text, { color: "gray" }, " - "),
-                React.createElement(Text, { color: "white" },
-                    "\"",
-                    email.subject,
-                    "\""),
-                React.createElement(Text, { color: "gray" }, " - "),
-                React.createElement(Text, { color: "gray" }, formatDate(email.date))),
-            summary && (React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
-                React.createElement(Text, { color: "yellow" }, "\uD83D\uDCA1 Summary:"),
-                React.createElement(Box, { marginLeft: 2 },
-                    React.createElement(Text, { color: "white" }, summary)))),
-            draft && (React.createElement(Box, { flexDirection: "column", marginBottom: 1 },
-                React.createElement(Text, { color: "yellow", bold: true }, "\uD83D\uDCDD Draft Reply:"),
-                React.createElement(Text, { color: "gray" }, "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"),
-                React.createElement(Box, { marginLeft: 2, marginY: 1 },
-                    React.createElement(Text, { color: "white" }, draft.editedContent || draft.draftContent)),
-                React.createElement(Text, { color: "gray" }, "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"))),
-            status === 'accepted' && (React.createElement(Text, { color: "green" }, "\u2705 Draft accepted")),
-            status === 'skipped' && (React.createElement(Text, { color: "gray" }, "\u23ED\uFE0F Skipped")),
-            status === 'edited' && (React.createElement(Text, { color: "yellow" }, "\u270F\uFE0F Draft edited"))));
+            React.createElement(Box, null,
+                React.createElement(Text, { color: "gray" }, "\u251C\u2500\u2500 "),
+                React.createElement(Text, null, email.from.name)),
+            React.createElement(Box, null,
+                React.createElement(Text, { color: "gray" }, "\u251C\u2500\u2500 "),
+                React.createElement(Text, null, email.subject)),
+            React.createElement(Box, null,
+                React.createElement(Text, { color: "gray" }, summary ? "├── " : "└── "),
+                React.createElement(Text, { color: "gray", dimColor: true }, formatDate(email.date))),
+            summary && (React.createElement(Box, null,
+                React.createElement(Text, { color: "gray" }, "\u2514\u2500\u2500 "),
+                React.createElement(Text, null,
+                    "Summary: ",
+                    summary))),
+            draft && (React.createElement(React.Fragment, null,
+                React.createElement(Box, { marginTop: 1 },
+                    React.createElement(AnimatedDot, { status: "default" }),
+                    React.createElement(Text, null, "Draft Reply:")),
+                React.createElement(Box, { marginLeft: 2, marginBottom: 1 },
+                    React.createElement(Text, { color: "white" }, draft.editedContent || draft.draftContent)))),
+            processingStatus && (React.createElement(Box, { marginBottom: 1 },
+                React.createElement(AnimatedDot, { status: processingStatus.includes('Failed') || processingStatus.includes('Error')
+                        ? 'error'
+                        : isStatusComplete
+                            ? 'success'
+                            : 'processing' }),
+                React.createElement(Text, { color: "gray", dimColor: true }, processingStatus))),
+            chatMessages.length > 0 && (React.createElement(Box, { flexDirection: "column", marginTop: 1, marginBottom: 1 }, chatMessages.slice(-3).map((message, idx) => (React.createElement(Box, { key: message.id, marginBottom: 1 },
+                React.createElement(Text, { color: "gray" }, idx === chatMessages.slice(-3).length - 1 ? "└── " : "├── "),
+                React.createElement(Text, { color: message.isUser ? "cyan" : "white" },
+                    message.isUser ? "You: " : "",
+                    message.text)))))),
+            React.createElement(Box, { marginTop: 1, marginBottom: 1 },
+                React.createElement(Text, { color: "gray" }, "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")),
+            React.createElement(Box, { flexDirection: "row", alignItems: "center" },
+                React.createElement(Text, { color: "gray" },
+                    '>',
+                    " "),
+                React.createElement(TextInput, { value: inputText, onChange: setInputText, onSubmit: handleChatSubmit, placeholder: "Chat with Claude or use controls..." }))));
     };
     const renderChatMessages = () => (React.createElement(Box, { flexDirection: "column", marginBottom: 1 }, chatMessages.slice(-3).map(message => (React.createElement(Box, { key: message.id, marginLeft: message.isUser ? 2 : 0 },
         React.createElement(Text, { color: message.isUser ? "cyan" : "green" },
@@ -296,19 +404,20 @@ const StreamingInterface = ({ inboxService, debug = false, onComplete, onBack })
             message.text))))));
     return (React.createElement(Box, { flexDirection: "column", paddingY: 1 },
         dashboardVisible && renderDashboard(),
-        state === 'streaming' && (React.createElement(Box, { flexDirection: "column" }, processedEmails
-            .filter((_, index) => index <= currentEmailIndex)
-            .map((processedEmail, index) => renderEmailCard(processedEmail, index)))),
-        chatMessages.length > 0 && renderChatMessages(),
-        React.createElement(Box, { flexDirection: "column", marginTop: 1 },
+        state === 'streaming' && (React.createElement(Box, { flexDirection: "column" },
+            processedEmails
+                .filter((_, index) => index < currentEmailIndex)
+                .map((processedEmail, index) => renderEmailCard(processedEmail, index)),
+            processedEmails[currentEmailIndex] && renderActiveEmailCard(),
+            processedEmails[currentEmailIndex] && (React.createElement(Box, { marginTop: 1 },
+                React.createElement(Text, { color: "white", dimColor: true }, "Tab: Accept \u2022 \u2192: Skip \u2022 \u2193: Edit \u2022 Esc: Back"))))),
+        state === 'dashboard' && (React.createElement(Box, { flexDirection: "column", marginTop: 1 },
             React.createElement(Box, { borderStyle: "round", borderColor: "white", borderDimColor: true, paddingX: 1, flexDirection: "row", alignItems: "center" },
                 React.createElement(Text, { color: "gray" },
                     '>',
                     " "),
-                React.createElement(TextInput, { value: inputText, onChange: setInputText, onSubmit: handleChatSubmit, placeholder: state === 'dashboard'
-                        ? "Ready to process all emails..."
-                        : "Chat with Claude or use controls..." })),
-            state === 'dashboard' ? (React.createElement(Text, { color: "white", dimColor: true }, "Tab to Start \u2022 Esc to Exit")) : (React.createElement(Text, { color: "white", dimColor: true }, "Tab: Accept \u2022 \u2192: Skip \u2022 \u2193: Edit \u2022 Esc: Back"))),
+                React.createElement(TextInput, { value: inputText, onChange: setInputText, onSubmit: handleChatSubmit, placeholder: "Ready to process all emails..." })),
+            React.createElement(Text, { color: "white", dimColor: true }, "Tab to Start \u2022 Esc to Exit"))),
         debug && state === 'streaming' && (React.createElement(Box, { flexDirection: "column", marginTop: 2, paddingTop: 1, borderStyle: "single", borderColor: "gray" },
             React.createElement(Text, { color: "gray" }, "Debug Info:"),
             React.createElement(Text, { color: "gray" },

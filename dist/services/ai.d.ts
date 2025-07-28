@@ -30,7 +30,7 @@ export declare class AIService {
     }>;
     private getFallbackDraft;
     askForClarification(email: Email, question: string): Promise<string>;
-    improveEmailDraft(originalDraft: string, userFeedback: string, email: Email): Promise<string>;
+    improveEmailDraft(originalDraft: string, userFeedback: string, email: Email, onProgress?: (message: string) => void): Promise<string>;
     streamBatchProcess(emails: Email[]): AsyncGenerator<{
         type: string;
         data: any;
